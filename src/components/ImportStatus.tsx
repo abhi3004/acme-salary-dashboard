@@ -21,6 +21,7 @@ export default function ImportStatus({ importId }: { importId: string }) {
       completedOnce.current = true
       queryClient.invalidateQueries({ queryKey: ['employees'] })
       queryClient.invalidateQueries({ queryKey: ['filter-values'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
     }
   }, [record.data?.status, queryClient])
 

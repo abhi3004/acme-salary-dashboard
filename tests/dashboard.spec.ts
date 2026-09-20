@@ -12,7 +12,7 @@ const employees: Employee[] = Array.from({ length: 215 }, (_, index) => ({
   salary: 40_000 + index * 100,
   status: 'active',
   country: 'India',
-  currency: 'INR',
+  currency: index === 214 ? 'USD' : 'INR',
   joining_date: '2024-01-01T00:00:00Z',
   last_updated_date: '2026-01-01T00:00:00Z',
   last_updated_by: 'test',
@@ -20,10 +20,23 @@ const employees: Employee[] = Array.from({ length: 215 }, (_, index) => ({
 
 async function mockApi(page: Page) {
   const requests: URLSearchParams[] = []
+  await page.route('**/api/dashboard', (route) => route.fulfill({ json: {
+    employees: 215, departments: 2, countries: 1,
+    salaries: [
+      { currency: 'INR', employees: 214, total: 10839100, average: 50650 },
+      { currency: 'USD', employees: 1, total: 61400, average: 61400 },
+    ],
+    salary_by_department: [
+      { department: 'Sales', currency: 'INR', employees: 107, total: 5424900 },
+      { department: 'Engineering', currency: 'INR', employees: 107, total: 5414200 },
+      { department: 'Engineering', currency: 'USD', employees: 1, total: 61400 },
+    ],
+    statuses: [{ status: 'active', employees: 215 }],
+  } }))
   await page.route('**/api/employees/filters', (route) => route.fulfill({
     json: { filters: {
       department: ['Engineering', 'Sales', 'Empty'],
-      role: ['Specialist'], status: ['active'], country: ['India'], currency: ['INR'],
+      role: ['Specialist'], status: ['active'], country: ['India'], currency: ['INR', 'USD'],
     } },
   }))
   await page.route('**/api/employees?*', async (route) => {
@@ -170,4 +183,64 @@ test('contains horizontal scrolling at a narrow viewport', async ({ page }) => {
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390)
   await grid.evaluate((element) => { element.scrollLeft = element.scrollWidth })
   await expect(page.getByRole('button', { name: 'Joined', exact: true })).toBeVisible()
+})
+
+test('shows organization totals and switches salary currency independently of the table', async ({ page }) => {
+  await mockApi(page)
+  await page.goto('/')
+  const employeeMetric = page.getByRole('article', { name: 'Total employees', exact: true })
+  const averageMetric = page.getByRole('article', { name: 'Average salary', exact: true })
+  await expect(employeeMetric).toContainText('215')
+  await expect(averageMetric).toContainText('₹50,650')
+  await page.getByLabel('Overview currency').selectOption('USD')
+  await expect(averageMetric).toContainText('$61,400')
+  await expect(page.getByRole('article', { name: 'Total salaries', exact: true })).toContainText('$61,400')
+  await expect(page.getByRole('figure')).toHaveAccessibleName('Salary totals by department in USD')
+  await page.getByRole('combobox', { name: /^Department/ }).selectOption('Sales')
+  await expect(page.getByText('107 employees · page 1 of 5')).toBeVisible()
+  await expect(employeeMetric).toContainText('215')
+  await expect(averageMetric).toContainText('$61,400')
+})
+
+test('opens and closes mobile navigation and preserves access to the full directory and imports', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await mockApi(page)
+  await page.goto('/')
+  const menu = page.getByRole('navigation', { name: 'Main navigation' })
+  await expect(menu).toBeHidden()
+  await page.getByRole('button', { name: 'Open menu' }).click()
+  await expect(menu).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(menu).toBeHidden()
+  await expect(page.getByRole('button', { name: 'Open menu' })).toBeFocused()
+  await page.getByRole('button', { name: 'Open menu' }).click()
+  await menu.getByRole('link', { name: 'Employees', exact: true }).click()
+  await expect(page).toHaveURL('/employees')
+  await expect(menu).toBeHidden()
+  await expect(page.getByRole('heading', { name: 'Employee directory' })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Email' })).toBeAttached()
+  await page.getByRole('button', { name: 'Open menu' }).click()
+  await menu.getByRole('link', { name: 'Add employees' }).click()
+  await expect(page).toHaveURL('/add')
+  await expect(page.getByRole('tab', { name: 'Upload file' })).toHaveAttribute('aria-selected', 'true')
+  await page.getByRole('tab', { name: 'Add one manually' }).click()
+  await expect(page.getByLabel('Employee ID')).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390)
+})
+
+test('handles empty and unavailable summaries without showing invented financial totals', async ({ page }) => {
+  await mockApi(page)
+  await page.route('**/api/dashboard', (route) => route.fulfill({ status: 503, json: { error: { message: 'Unavailable' } } }))
+  await page.goto('/')
+  await expect(page.getByText('Couldn’t load the dashboard summary.', { exact: false })).toBeVisible()
+  await expect(page.getByRole('article', { name: 'Total salaries', exact: true })).toContainText('—')
+  await expect(page.locator('.employee-row').first()).toContainText('EMP-0001')
+  await page.route('**/api/dashboard', (route) => route.fulfill({ json: {
+    employees: 0, departments: 0, countries: 0, salaries: [], salary_by_department: [], statuses: [],
+  } }))
+  await page.getByRole('button', { name: 'Try again' }).click()
+  await expect(page.getByText('Your salary overview starts here')).toBeVisible()
+  await expect(page.getByRole('article', { name: 'Total employees', exact: true })).toContainText('0')
+  await expect(page.getByRole('article', { name: 'Average salary', exact: true })).toContainText('No salary records yet')
+  await expect(page.getByLabel('Overview currency')).toBeHidden()
 })

@@ -16,6 +16,32 @@ export interface Employee {
 }
 
 export const FILTERABLE_FIELDS = ['department', 'role', 'status', 'country', 'currency'] as const
+
+export type EditableEmployee = Omit<Employee, 'id' | 'last_updated_date' | 'last_updated_by'>
+export type EmployeeUpdate = Partial<EditableEmployee> & {
+  expected_last_updated_date: string
+  reason?: string
+}
+export interface EmployeeUpdateResponse {
+  employee: Employee
+  changed: boolean
+  audit_id: number | null
+}
+export type ChangeRequestStatus = 'pending' | 'approved' | 'rejected'
+export interface EmployeeChangeRequest {
+  id: string
+  employee_id: string
+  requested_by: string
+  approved_by: string | null
+  reason: string | null
+  changes: Partial<EditableEmployee>
+  filename: string
+  status: ChangeRequestStatus
+  error: string | null
+  created_at: string
+  reviewed_at: string | null
+  status_url: string
+}
 export type FilterableField = (typeof FILTERABLE_FIELDS)[number]
 
 export interface EmployeeListResponse {
@@ -25,6 +51,15 @@ export interface EmployeeListResponse {
 
 export interface FilterValuesResponse {
   filters: Record<FilterableField, string[]>
+}
+
+export interface DashboardSummary {
+  employees: number
+  departments: number
+  countries: number
+  salaries: { currency: string; employees: number; total: number; average: number }[]
+  salary_by_department: { department: string; currency: string; employees: number; total: number }[]
+  statuses: { status: string; employees: number }[]
 }
 
 export type ImportStatusValue = 'pending' | 'validating' | 'processing' | 'retrying' | 'completed' | 'failed'

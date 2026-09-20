@@ -9,7 +9,7 @@ export default function AddEmployee() {
   const [mode, setMode] = useState<Mode>('file')
   return (
     <section>
-      <h1>Add Employees</h1>
+      <div className="page-heading"><div><div className="eyebrow">GROW YOUR TEAM</div><h1>Add Employees</h1><p>A new addition, or a whole team. Start here.</p></div></div>
       <div className="tabs" role="tablist">
         <button role="tab" aria-selected={mode === 'file'} className={mode === 'file' ? 'active' : ''}
           onClick={() => setMode('file')}>Upload file</button>

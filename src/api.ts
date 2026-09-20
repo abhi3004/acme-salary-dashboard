@@ -4,6 +4,10 @@ import type {
   EmployeeListResponse,
   FilterValuesResponse,
   ImportRecord,
+  DashboardSummary,
+  EmployeeUpdate,
+  EmployeeUpdateResponse,
+  EmployeeChangeRequest,
 } from './types'
 
 export class ApiError extends Error {
@@ -40,6 +44,36 @@ export function fetchEmployees(params: EmployeeListParams, signal?: AbortSignal)
 
 export function fetchFilterValues(): Promise<FilterValuesResponse> {
   return fetch('/api/employees/filters').then((r) => json<FilterValuesResponse>(r))
+}
+
+export function fetchDashboard(signal?: AbortSignal): Promise<DashboardSummary> {
+  return fetch('/api/dashboard', { signal }).then((r) => json<DashboardSummary>(r))
+}
+
+export function fetchEmployee(id: string, signal?: AbortSignal): Promise<Employee> {
+  return fetch(`/api/employees/${encodeURIComponent(id)}`, { signal })
+    .then((response) => json<{ employee: Employee }>(response)).then((body) => body.employee)
+}
+
+export function updateEmployee(id: string, input: EmployeeUpdate, actor: string): Promise<EmployeeUpdateResponse> {
+  return fetch(`/api/employees/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'X-Updated-By': actor },
+    body: JSON.stringify(input),
+  }).then((response) => json<EmployeeUpdateResponse>(response))
+}
+
+export function requestEmployeeChange(id: string, input: EmployeeUpdate, actor: string, proof: File): Promise<EmployeeChangeRequest> {
+  const form = new FormData()
+  form.append('proof', proof)
+  form.append('changes', JSON.stringify(input))
+  return fetch(`/api/employees/${encodeURIComponent(id)}/change-requests`, {
+    method: 'POST', headers: { 'X-Updated-By': actor }, body: form,
+  }).then((response) => json<EmployeeChangeRequest>(response))
+}
+
+export function fetchEmployeeChangeRequests(id: string): Promise<{ requests: EmployeeChangeRequest[] }> {
+  return fetch(`/api/employees/${encodeURIComponent(id)}/change-requests`).then((response) => json(response))
 }
 
 export function fetchImport(id: string): Promise<ImportRecord> {
