@@ -5,7 +5,6 @@ import type { employeeTableFeatures } from '../tables/employees'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { Employee } from '../types'
 
-const ROW_HEIGHT = 44
 const HEADER_HEIGHT = 44
 
 interface EmployeeTableProps<TSelected = unknown> {
@@ -13,9 +12,10 @@ interface EmployeeTableProps<TSelected = unknown> {
   scrollKey: string
   busy: boolean
   emptyMessage: string
+  rowHeight?: number
 }
 
-export default function EmployeeTable<TSelected>({ table, scrollKey, busy, emptyMessage }: EmployeeTableProps<TSelected>) {
+export default function EmployeeTable<TSelected>({ table, scrollKey, busy, emptyMessage, rowHeight = 44 }: EmployeeTableProps<TSelected>) {
   // TanStack Virtual exposes a mutable instance; keep its reads out of compiler memoization.
   'use no memo'
 
@@ -27,7 +27,7 @@ export default function EmployeeTable<TSelected>({ table, scrollKey, busy, empty
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: () => rowHeight,
     getItemKey,
     overscan: 5,
     // Rows start below the header, which remains in the native table flow.
@@ -51,7 +51,7 @@ export default function EmployeeTable<TSelected>({ table, scrollKey, busy, empty
       role="region"
       aria-label="Employee table, scroll to see more rows and columns"
       tabIndex={0}
-      style={{ '--employee-row-height': `${ROW_HEIGHT}px`, '--employee-header-height': `${HEADER_HEIGHT}px` } as CSSProperties}
+      style={{ '--employee-row-height': `${rowHeight}px`, '--employee-header-height': `${HEADER_HEIGHT}px` } as CSSProperties}
     >
       <table
         className="employee-table"

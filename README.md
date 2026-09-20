@@ -1,12 +1,34 @@
 # Acme Salary Dashboard
 
+The dashboard combines a persistent sidebar, organization-wide summary cards,
+salary totals by department, a team-status chart, and a compact employee table.
+The `/employees` directory retains the full employee columns, while `/add`
+supports file imports and manual entry. On small screens the sidebar becomes
+a menu that can be dismissed with Escape or by selecting a destination.
+
+Summary data comes from `GET /api/dashboard` in the salary service. Salary cards
+and the department chart share a currency selector; values in different currencies
+are never combined. Organization-wide summaries are independent of table filters
+and pagination and refresh after a completed import. Loading, empty, and failed
+summary requests have separate states.
+
+Employee IDs in both tables link to `/employee/:id`. The employee details page
+supports edits to personal information, employment status, department, role,
+country, joining date, salary, and currency. HR provides their work email for
+update attribution and reviews the exact before/after changes in an “Are you
+sure?” dialog before any PATCH request is sent. Success and failure toasts report
+the outcome; failed updates preserve the draft. Saving refreshes the employee,
+directory, filter options, and dashboard summaries. Stale edits are rejected;
+the page provides an explicit action to discard edits and reload the latest record.
+
 The employee grid uses headless TanStack Table v9 and TanStack Virtual. Its
 560px scroll viewport contains sticky headers and fixed-height, virtualized rows.
+Dashboard rows are 62px; full-directory rows are 44px.
 Column widths stay stable as rows enter and leave the viewport; long cell values
 are truncated visually and available in the cell's title.
 
 Sorting, filtering, and pagination are processed by the existing API, which caps
-pages at 100 rows. Virtualization limits the rendered rows within the current
+pages at 10,000 rows. Virtualization limits the rendered rows within the current
 page. The stable feature configuration registers only sorting and pagination;
 no client processing row models or function registries are necessary. Query and
 Table share sorting/pagination atoms, while filters remain dashboard inputs.
