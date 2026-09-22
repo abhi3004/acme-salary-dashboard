@@ -3,6 +3,44 @@
 AI development tooling: [quality skills, sources, and setup](docs/AI_SKILLS.md).
 This records installation, not a completed accessibility or security audit.
 
+## API environment configuration
+
+Browser requests stay on the frontend origin under `/api`. Vite reads
+`API_PROXY_TARGET` from the selected mode's env file and forwards those requests,
+preserving the `/api` path and setting the upstream Host header correctly:
+
+- `.env.development`: `http://localhost:3000` (used by `npm run dev`).
+- `.env.production`: `https://of-acme-salary-dashboard-service-production.up.railway.app`
+  (used by production-mode tooling and `npm run preview`).
+
+These files contain only public backend URLs and are intentionally tracked. Put
+personal overrides in `.env.development.local` or `.env.production.local`; those
+files are ignored by Git. A process environment variable takes precedence over
+env files. Use an HTTP(S) origin without `/api`, credentials, query, or fragment.
+Restart Vite after changing an env file. Do not store passwords or tokens here;
+especially never expose secrets through `VITE_` variables.
+
+To use the Railway API during local development:
+
+```sh
+npm run dev -- --mode production
+```
+
+That mode connects to the real backend, so form submissions affect its data.
+
+**Production deployment is not configured by an env file alone.** Vite builds
+static files; `dist` contains no running proxy. The production frontend host must
+route `/api/*` to the Railway backend and forward request/response cookies.
+Do not replace browser requests with the absolute Railway URL without designing
+CORS and cross-site cookie handling: the current login uses same-site cookies.
+`npm run preview` is for local verification, not a production web server.
+See [Vite env configuration](https://vite.dev/config/#using-environment-variables-in-config)
+and [static deployment guidance](https://vite.dev/guide/static-deploy).
+
+Run `npm run test:config` for deterministic mode/override/validation checks.
+
+## Application overview
+
 The **Notifications** tab provides a read-only activity feed for accounts with
 `audit.read`. It shows who changed what and when across employee imports, salary and
 profile edits, change requests, payroll, and user invitations. Expand an event to see

@@ -14,6 +14,12 @@ playwright-report
 test-results
 *.local
 
+# Keep only the non-secret proxy defaults in Git.
+.env*
+!.env.development
+!.env.production
+!.env.example
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

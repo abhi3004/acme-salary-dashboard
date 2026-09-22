@@ -92,3 +92,21 @@ installation record as an already-completed audit.
 See [official skill documentation](https://learn.chatgpt.com/docs/build-skills)
 for discovery and invocation. Installed skills should be available on the next
 turn; if they do not appear, restart Codex.
+
+## Usage record — 2026-09-22: environment-driven proxy
+
+- Request: "ok so better to have an env file for this", following the request to
+  point the frontend at the Railway backend.
+- Skill used: `javascript-testing-patterns` for deterministic configuration tests.
+- Scope: Vite development/preview configuration, env defaults, validation, and
+  documentation. No application authentication changes or production deployment.
+- Decision: retain same-origin `/api` calls; select the upstream with
+  `API_PROXY_TARGET`. Environment files alone do not configure a static host's
+  production reverse proxy.
+- Verification: `npm run test:config` passed 11 tests, including isolated env-mode
+  loading, overrides and invalid origins; `npm run build`, `npm run lint`, and
+  `git diff --check` passed. A local production-mode preview served HTTP 200 and
+  forwarded an unauthenticated GET `/api/auth/me` to Railway, receiving the
+  expected HTTP 401. No authenticated requests or production writes were made.
+- Not verified: the deployed frontend's routing or authenticated cookie flow.
+- Commit: not created during this change.
