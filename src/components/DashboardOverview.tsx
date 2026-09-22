@@ -1,7 +1,6 @@
-import { useState, type CSSProperties } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import type { CSSProperties } from 'react'
+import type { UseQueryResult } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { fetchDashboard } from '../api'
 import type { DashboardSummary } from '../types'
 import Icon, { type IconName } from './Icon'
 
@@ -13,22 +12,23 @@ const money = (value: number, currency: string, compact = false) => new Intl.Num
 const statusLabel = (value: string) => value.replace(/[_-]/g, ' ').replace(/^./, (char) => char.toUpperCase())
 const STATUS_COLORS = ['#438b81', '#ff725e', '#ecc576', '#89aecb', '#a79abc', '#aaa99e']
 
-function MetricCard({ label, value, note, icon, tone, loading }: {
-  label: string; value: string; note: string; icon: IconName; tone: string; loading: boolean
+function MetricCard({ label, value, note, icon, tone, loading, denominator }: {
+  label: string; value: string; note: string; icon: IconName; tone: string; loading: boolean; denominator?: string
 }) {
   return <article className={`metric-card metric-${tone}`} aria-label={label} aria-busy={loading}>
     <div className="metric-main"><span className="metric-icon"><Icon name={icon} size={22} /></span>
-      <div className="metric-copy"><strong className={loading ? 'metric-skeleton' : undefined} title={value}>{value}</strong><h2>{label}</h2></div>
+      <div className="metric-copy"><strong className={loading ? 'metric-skeleton' : denominator ? 'metric-with-denominator' : undefined} title={denominator ? `${value} / ${denominator}` : value}>
+        {value}{denominator && <span className="metric-denominator"> / {denominator}</span>}</strong><h2>{label}</h2></div>
     </div>
     <p className="metric-note">{note}</p>
   </article>
 }
 
 function DepartmentChart({ summary, currency }: { summary: DashboardSummary; currency: string }) {
-  const departments = summary.salary_by_department.filter((entry) => entry.currency === currency)
+  const departments = summary.compensation.departments
   const entries = departments.slice(0, 5)
   if (departments.length > 5) entries.push({
-    department: 'Other departments', currency,
+    department: 'Other departments',
     employees: departments.slice(5).reduce((sum, entry) => sum + entry.employees, 0),
     total: departments.slice(5).reduce((sum, entry) => sum + entry.total, 0),
   })
@@ -71,42 +71,49 @@ function TeamOverview({ summary }: { summary: DashboardSummary }) {
   </div>
 }
 
-export default function DashboardOverview() {
-  const [selectedCurrency, setSelectedCurrency] = useState('')
-  const summary = useQuery({ queryKey: ['dashboard'], queryFn: ({ signal }) => fetchDashboard(signal) })
+export default function DashboardOverview({ summary }: { summary: UseQueryResult<DashboardSummary, Error> }) {
   const data = summary.data
-  const salary = data?.salaries.find((entry) => entry.currency === selectedCurrency) ?? data?.salaries[0]
+  const salary = data?.compensation
   const currency = salary?.currency ?? ''
   const loading = summary.isPending
   const unavailable = loading ? 'Loading overview…' : 'Overview unavailable'
+  const scope = data?.country ?? 'Global'
+  const hasSalary = !!data?.employees && salary?.total !== null && salary?.average !== null && !!currency
+  const estimated = salary?.approximate
+  const salaryNote = !data ? unavailable : !data.employees ? 'No salary records yet'
+    : hasSalary ? `${scope} · ${currency}${estimated ? ' · Approximate' : ''}` : 'Salary conversion unavailable'
+  const compensationUnavailable = !!data?.employees && !hasSalary
 
   return <>
     {summary.isError && <div className="overview-error" role="status"><span>Couldn’t load the dashboard summary. Your employee list is still available below.</span><button className="link" onClick={() => summary.refetch()}>Try again</button></div>}
     <div className="metric-grid">
       <MetricCard label="Total employees" value={data ? number(data.employees) : '—'} icon="people" tone="green" loading={loading}
-        note={data ? `Across ${number(data.countries)} ${data.countries === 1 ? 'country' : 'countries'}` : unavailable} />
-      <MetricCard label="Average salary" value={salary ? money(salary.average, currency) : '—'} icon="wallet" tone="pink" loading={loading}
-        note={data ? salary ? `${currency} · ${number(salary.employees)} ${salary.employees === 1 ? 'employee' : 'employees'}` : 'No salary records yet' : unavailable} />
-      <MetricCard label="Total salaries" value={salary ? money(salary.total, currency, salary.total >= 10000000) : '—'} icon="chart" tone="blue" loading={loading}
-        note={data ? salary ? `Current recorded salaries · ${currency}` : 'No salary records yet' : unavailable} />
+        denominator={data?.country ? number(data.organization.employees) : undefined}
+        note={data ? data.country ? `In ${data.country} / organization total` : `Across ${number(data.countries)} ${data.countries === 1 ? 'country' : 'countries'}` : unavailable} />
+      <MetricCard label="Average salary" value={hasSalary ? `${estimated ? '≈ ' : ''}${money(salary!.average!, currency)}` : '—'} icon="wallet" tone="pink" loading={loading}
+        note={salaryNote} />
+      <MetricCard label="Total salaries" value={hasSalary ? `${estimated ? '≈ ' : ''}${money(salary!.total!, currency, salary!.total! >= 10000000)}` : '—'} icon="chart" tone="blue" loading={loading}
+        note={salaryNote} />
       <MetricCard label="Departments" value={data ? number(data.departments) : '—'} icon="building" tone="yellow" loading={loading}
-        note={data ? 'Teams across your organization' : unavailable} />
+        note={data ? data.country ? `Teams in ${data.country}` : 'Teams across your organization' : unavailable} />
     </div>
     <div className="overview-grid">
       <section className="overview-panel salary-panel" aria-labelledby="salary-heading">
-        <div className="panel-heading"><div><h2 id="salary-heading">Salary overview</h2><p>Current salaries by department</p></div>
-          {salary && <label className="currency-select"><span className="sr-only">Overview currency</span><select value={currency} onChange={(event) => setSelectedCurrency(event.target.value)}>
-            {data?.salaries.map((entry) => <option key={entry.currency} value={entry.currency}>{entry.currency}</option>)}
-          </select></label>}
+        <div className="panel-heading"><div><h2 id="salary-heading">Salary overview</h2><p>{scope} · Current salaries by department{currency && ` · ${currency}`}</p></div>
+          <Icon name="chart" size={19} />
         </div>
-        {data ? <DepartmentChart summary={data} currency={currency} /> : <div className={`chart-empty${loading ? ' chart-loading' : ''}`}><Icon name="chart" size={30} /><span>{unavailable}</span></div>}
-        <div className="panel-footnote"><span className="legend-dot" />Recorded salary totals{currency && ` · ${currency}`}<span>All employees</span></div>
+        {compensationUnavailable ? <div className="chart-empty" role="status"><Icon name="chart" size={30} /><strong>Salary conversion unavailable</strong>
+          <span>{currency ? `No reference rate for ${salary!.unavailable_currencies.join(', ')}. Totals are hidden to avoid an incomplete estimate.`
+            : 'A reporting currency could not be determined for this country.'}</span></div>
+          : data ? <DepartmentChart summary={data} currency={currency} /> : <div className={`chart-empty${loading ? ' chart-loading' : ''}`}><Icon name="chart" size={30} /><span>{unavailable}</span></div>}
+        <div className="panel-footnote"><span className="legend-dot" />{estimated ? 'Approximate salary totals' : 'Recorded salary totals'}{currency && ` · ${currency}`}<span>{scope}</span></div>
       </section>
       <section className="overview-panel team-panel" aria-labelledby="team-heading">
-        <div className="panel-heading"><div><h2 id="team-heading">Team overview</h2><p>A little perspective on your people</p></div><Icon name="people" size={19} /></div>
+        <div className="panel-heading"><div><h2 id="team-heading">Team overview</h2><p>{scope} · Employee status</p></div><Icon name="people" size={19} /></div>
         {data ? <TeamOverview summary={data} /> : <div className={`chart-empty${loading ? ' chart-loading' : ''}`}><Icon name="people" size={30} /><span>{unavailable}</span></div>}
         <Link className="panel-footer-link" to="/employees">View all employees <Icon name="arrow" size={16} /></Link>
       </section>
     </div>
+    {data && estimated && data.employees > 0 && <p className="exchange-rate-note">Estimates use fixed {salary!.exchange_rates.source} reference rates from {salary!.exchange_rates.date}; not live rates. Employee salary records remain in their original currencies.</p>}
   </>
 }

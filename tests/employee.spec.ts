@@ -16,12 +16,25 @@ async function mockEmployeeApi(page: Page, id = employee.id) {
     const url = new URL(route.request().url())
     const path = decodeURIComponent(url.pathname)
     const record = state.employee
+    if (path === '/api/auth/me') return route.fulfill({ json: { user: {
+      id: 'admin', name: 'Test Admin', email: 'admin@acme.test', is_admin: true,
+      permissions: ['employee.read', 'employee.profile.update', 'salary.read', 'salary.change.request',
+        'salary.change.approve', 'salary.change.apply', 'payroll.read', 'payroll.manage', 'audit.read', 'user.manage'],
+    } } })
     if (path === '/api/employees/filters') return route.fulfill({ json: { filters: {
       department: ['Engineering', 'Finance'], role: ['Engineer', 'Manager'], status: ['active', 'inactive', 'on_leave'],
       country: ['India', 'US'], currency: ['INR', 'USD'],
     } } })
     if (path === '/api/dashboard') return route.fulfill({ json: {
       employees: 1, countries: 1, departments: 1,
+      organization: { employees: 1, countries: 1, departments: 1 }, country: null, country_options: [record.country],
+      compensation: {
+        currency: 'USD', total: record.salary / 109.8755 * 1.146, average: record.salary / 109.8755 * 1.146,
+        approximate: true, unavailable_currencies: [],
+        departments: [{ department: record.department, employees: 1, total: record.salary / 109.8755 * 1.146 }],
+        exchange_rates: { date: '2026-09-18', source: 'European Central Bank',
+          source_url: 'https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml' },
+      },
       salaries: [{ currency: record.currency, employees: 1, total: record.salary, average: record.salary }],
       salary_by_department: [{ department: record.department, currency: record.currency, employees: 1, total: record.salary }],
       statuses: [{ status: record.status, employees: 1 }],
@@ -80,7 +93,7 @@ test('IDs link to the details page from both the dashboard and full directory', 
 test('shows the exact changes before saving, supports cancel, and refreshes the employee and dashboard', async ({ page }) => {
   const state = await mockEmployeeApi(page)
   await page.goto('/')
-  await expect(page.getByRole('article', { name: 'Average salary' })).toContainText('₹50,000')
+  await expect(page.getByRole('article', { name: 'Average salary' })).toContainText('≈ $522')
   await page.getByRole('link', { name: 'EMP-001', exact: true }).click()
   await page.getByLabel('First name').fill('Priya')
   await page.getByLabel('Salary', { exact: true }).fill('65000.75')
@@ -106,7 +119,7 @@ test('shows the exact changes before saving, supports cancel, and refreshes the 
     expected_last_updated_date: employee.last_updated_date, first_name: 'Priya', status: 'inactive', salary: 65000.75, reason: 'Annual review',
   } }])
   await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Dashboard' }).click()
-  await expect(page.getByRole('article', { name: 'Average salary' })).toContainText('₹65,001')
+  await expect(page.getByRole('article', { name: 'Average salary' })).toContainText('≈ $678')
   await expect(page.locator('.employee-row').first()).toContainText('Priya Sharma')
   await expect(page.locator('.employee-row').first()).toContainText('inactive')
   await page.getByRole('link', { name: 'EMP-001', exact: true }).click()

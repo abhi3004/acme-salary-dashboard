@@ -3,7 +3,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useCreateAtom, useSelector } from '@tanstack/react-store'
 import { useTable, type PaginationState, type SortingState } from '@tanstack/react-table'
 import { Link } from 'react-router-dom'
-import { fetchEmployees, fetchFilterValues } from '../api'
+import { fetchDashboard, fetchEmployees, fetchFilterValues } from '../api'
 import EmployeeTable from '../components/EmployeeTable'
 import DashboardOverview from '../components/DashboardOverview'
 import Icon from '../components/Icon'
@@ -21,6 +21,9 @@ export default function Dashboard({ directory = false }: { directory?: boolean }
   const sorting = useSelector(sortingAtom)
   const page = useSelector(paginationAtom)
   const [filters, setFilters] = useState<EmployeeListParams['filters']>({})
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [searchDraft, setSearchDraft] = useState('')
+  const [search, setSearch] = useState('')
   const [salary, setSalary] = useState({ min: '', max: '' })
   const [salaryDraft, setSalaryDraft] = useState({ min: '', max: '' })
   const params: EmployeeListParams = {
@@ -29,11 +32,18 @@ export default function Dashboard({ directory = false }: { directory?: boolean }
     sort: (sorting[0]?.id ?? 'id') as keyof Employee,
     order: sorting[0]?.desc ? 'desc' : 'asc',
     filters,
+    search,
     minSalary: salary.min,
     maxSalary: salary.max,
   }
 
   const filterValues = useQuery({ queryKey: ['filter-values'], queryFn: fetchFilterValues })
+  const country = directory ? '' : filters.country ?? ''
+  const summary = useQuery({
+    queryKey: ['dashboard', country], queryFn: ({ signal }) => fetchDashboard(signal, country), enabled: !directory,
+  })
+  const countryOptions = [...new Set([...(summary.data?.country_options ?? filterValues.data?.filters.country ?? []),
+    ...(country ? [country] : [])])]
   const employees = useQuery({
     queryKey: ['employees', params],
     queryFn: ({ signal }) => fetchEmployees(params, signal),
@@ -62,32 +72,64 @@ export default function Dashboard({ directory = false }: { directory?: boolean }
     setSalary({ min: salaryDraft.min.trim(), max: salaryDraft.max.trim() })
     table.setPageIndex(0)
   }
+  const applySearch = () => {
+    setSearch(searchDraft.trim())
+    table.setPageIndex(0)
+  }
   const clearFilters = () => {
     setSalaryDraft({ min: '', max: '' })
     setSalary({ min: '', max: '' })
-    setFilters({})
+    setFilters(directory ? {} : { country })
     table.setPageIndex(0)
   }
 
   const pagination = employees.data?.pagination
-  const hasFilters = Object.values(params.filters).some(Boolean) || params.minSalary || params.maxSalary
+  const activeFilterCount = Object.entries(params.filters).filter(([field, value]) => value && (directory || field !== 'country')).length
+    + (params.minSalary ? 1 : 0) + (params.maxSalary ? 1 : 0)
+  const hasFilters = activeFilterCount > 0
 
   return (
     <section className="dashboard-page">
       <div className="page-heading">
         <div><div className="eyebrow">WORKSPACE OVERVIEW</div><h1>{directory ? 'Employees' : 'Dashboard'}</h1>
           <p>{directory ? 'Your people, all in one place.' : 'A clear view of your people and payroll.'}</p></div>
-        <Link className="button button-dark" to="/add"><Icon name="plus" size={17} />Add employee</Link>
+        <div className="dashboard-heading-actions">
+          {!directory && <label className="dashboard-country"><span>Country</span>
+            <select aria-label="Dashboard country" value={country} onChange={(event) => setFilter('country', event.target.value)}>
+              <option value="">Global</option>
+              {countryOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+            </select>
+          </label>}
+          <Link className="button button-dark" to="/add"><Icon name="plus" size={17} />Add employee</Link>
+        </div>
       </div>
-      {!directory && <DashboardOverview />}
+      {!directory && <DashboardOverview summary={summary} />}
       <section className="employee-panel" aria-labelledby="employees-heading">
         <div className="employee-panel-heading"><div className="employee-title"><h2 id="employees-heading">{directory ? 'Employee directory' : 'Employees'}</h2>
           {pagination && <span className="count-badge">{pagination.total.toLocaleString()}</span>}</div>
-          <div className="employee-panel-actions"><span><Icon name="filter" size={15} />Filter your team</span>
+          <div className="employee-panel-actions">
             {!directory && <Link to="/employees">View directory <Icon name="arrow" size={15} /></Link>}</div>
         </div>
-      <div className="filters">
-        {FILTERABLE_FIELDS.map((field) => (
+      <div className="employee-tools">
+        <form className="employee-search" role="search" onSubmit={(event) => { event.preventDefault(); applySearch() }}>
+          <label className="sr-only" htmlFor={`employee-search-${directory ? 'directory' : 'dashboard'}`}>Search employees</label>
+          <input id={`employee-search-${directory ? 'directory' : 'dashboard'}`} type="search"
+            placeholder="Search name, ID, country or email" value={searchDraft}
+            onChange={(event) => setSearchDraft(event.target.value)} />
+          <button type="submit" className="button button-dark">Search</button>
+        </form>
+        <button type="button" className={`filter-toggle${hasFilters ? ' has-active-filters' : ''}`}
+          aria-expanded={filtersOpen} aria-controls="employee-filters" onClick={() => setFiltersOpen((open) => !open)}>
+          <Icon name="filter" size={15} />Filters
+          {hasFilters && <span className="filter-count" aria-label={`${activeFilterCount} active filters`}>{activeFilterCount}</span>}
+          <span className={`filter-caret${filtersOpen ? ' open' : ''}`} aria-hidden="true">⌄</span>
+        </button>
+        {(search || hasFilters) && <button type="button" className="link clear-employee-tools" onClick={() => {
+          setSearchDraft(''); setSearch(''); clearFilters()
+        }}>Clear all</button>}
+      </div>
+      {filtersOpen && <div className="filters" id="employee-filters">
+        {FILTERABLE_FIELDS.filter((field) => directory || field !== 'country').map((field) => (
           <label key={field}>
             {fieldLabel(field)}
             <select value={params.filters[field] ?? ''} onChange={(e) => setFilter(field, e.target.value)}>
@@ -111,7 +153,7 @@ export default function Dashboard({ directory = false }: { directory?: boolean }
             onBlur={applySalary} onKeyDown={(e) => e.key === 'Enter' && applySalary()} />
         </label>
         {hasFilters && <button type="button" className="link" onClick={clearFilters}>Clear filters</button>}
-      </div>
+      </div>}
 
       {employees.isError && <p className="error" role="alert">{employees.error.message}</p>}
       <p className="sr-only" role="status">{employees.isPending ? 'Loading employees…' : employees.isFetching ? 'Updating employees…' : ''}</p>
@@ -121,7 +163,7 @@ export default function Dashboard({ directory = false }: { directory?: boolean }
         busy={employees.isFetching}
         rowHeight={directory ? 44 : 62}
         emptyMessage={employees.isPending ? 'Loading employees…' : employees.isError
-          ? 'Unable to load employees.' : 'No employees match the current filters.'}
+          ? 'Unable to load employees.' : 'No employees match your search or filters.'}
       />
       {pagination && (
         <div className="pager">

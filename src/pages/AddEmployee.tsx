@@ -5,7 +5,7 @@ import ImportStatus from '../components/ImportStatus'
 
 type Mode = 'file' | 'form'
 
-export default function AddEmployee() {
+export default function AddEmployee({ currentUserEmail }: { currentUserEmail: string }) {
   const [mode, setMode] = useState<Mode>('file')
   return (
     <section>
@@ -16,7 +16,7 @@ export default function AddEmployee() {
         <button role="tab" aria-selected={mode === 'form'} className={mode === 'form' ? 'active' : ''}
           onClick={() => setMode('form')}>Add one manually</button>
       </div>
-      {mode === 'file' ? <FileUpload /> : <SingleEmployeeForm />}
+      {mode === 'file' ? <FileUpload /> : <SingleEmployeeForm currentUserEmail={currentUserEmail} />}
     </section>
   )
 }
@@ -63,18 +63,17 @@ const FORM_FIELDS = [
   { name: 'country', label: 'Country', placeholder: 'India', datalist: 'country' },
   { name: 'joining_date', label: 'Joining date', type: 'date' },
   { name: 'currency', label: 'Currency (ISO 4217)', placeholder: 'INR', datalist: 'currency' },
-  { name: 'last_updated_by', label: 'Updated by', placeholder: 'hr.admin@example.com' },
 ] as const
 
 type FormValues = Record<(typeof FORM_FIELDS)[number]['name'], string>
 const emptyForm = Object.fromEntries(FORM_FIELDS.map((f) => [f.name, ''])) as FormValues
 
-function SingleEmployeeForm() {
+function SingleEmployeeForm({ currentUserEmail }: { currentUserEmail: string }) {
   const [values, setValues] = useState<FormValues>(emptyForm)
   const filterValues = useQuery({ queryKey: ['filter-values'], queryFn: fetchFilterValues })
   const submit = useMutation({
     mutationFn: (form: FormValues) =>
-      uploadSingleEmployee({ ...form, last_updated_date: new Date().toISOString().slice(0, 10) }),
+      uploadSingleEmployee({ ...form, last_updated_by: currentUserEmail, last_updated_date: new Date().toISOString().slice(0, 10) }),
   })
 
   const onSubmit = (e: FormEvent) => {
@@ -106,6 +105,10 @@ function SingleEmployeeForm() {
               />
             </label>
           ))}
+          <label>
+            Updated by
+            <input type="email" name="last_updated_by" value={currentUserEmail} disabled />
+          </label>
         </div>
         {(['department', 'role', 'status', 'country', 'currency'] as const).map((field) => (
           <datalist key={field} id={`list-${field}`}>
