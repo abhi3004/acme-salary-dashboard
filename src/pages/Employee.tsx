@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 import { ApiError, fetchEmployee, fetchEmployeeChangeRequests, fetchFilterValues, requestEmployeeChange } from '../api'
 import Icon from '../components/Icon'
+import PayrollOverview from '../components/PayrollOverview'
 import type { EditableEmployee, Employee as EmployeeRecord, EmployeeUpdate } from '../types'
 
 const FIELD_LABELS: Record<keyof EditableEmployee, string> = {
@@ -53,6 +54,7 @@ function EmployeeEditor({ initialEmployee, reload }: { initialEmployee: Employee
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null)
   const [toast, setToast] = useState<Toast | null>(null)
   const [reloading, setReloading] = useState(false)
+  const [activeTab, setActiveTab] = useState<'details' | 'payroll'>('details')
   const filters = useQuery({ queryKey: ['filter-values'], queryFn: fetchFilterValues })
   const requests = useQuery({ queryKey: ['employee-change-requests', saved.id], queryFn: () => fetchEmployeeChangeRequests(saved.id),
     refetchInterval: (query) => query.state.data?.requests.some((request) => request.status === 'pending') ? 1000 : false })
@@ -138,7 +140,11 @@ function EmployeeEditor({ initialEmployee, reload }: { initialEmployee: Employee
       <div className="profile-identity"><h2>{saved.first_name} {saved.last_name}</h2><p>{saved.role} <span>·</span> {saved.department}</p><span className="profile-id">{saved.id}</span></div>
       <span className={`badge profile-status badge-${saved.status}`}>{statusLabel(saved.status)}</span>
     </div>
-    <div className="employee-details-layout">
+    <div className="employee-tabs" role="tablist" aria-label="Employee sections">
+      <button type="button" role="tab" aria-selected={activeTab === 'details'} onClick={() => setActiveTab('details')}>Employee details</button>
+      <button type="button" role="tab" aria-selected={activeTab === 'payroll'} onClick={() => setActiveTab('payroll')}>Payroll history</button>
+    </div>
+    {activeTab === 'payroll' ? <div role="tabpanel"><PayrollOverview employeeId={saved.id} /></div> : <div className="employee-details-layout" role="tabpanel">
       <form className="employee-edit-form" onSubmit={submit}>
         <fieldset disabled={update.isPending || reloading} className="employee-fields">
           <section className="panel employee-form-section" aria-labelledby="personal-heading">
@@ -186,7 +192,7 @@ function EmployeeEditor({ initialEmployee, reload }: { initialEmployee: Employee
           {requests.data?.requests.slice(0, 5).map((request) => <div className="change-request-item" key={request.id}><strong>{request.status}</strong><span>{request.filename}</span>{request.approved_by && <small>Approved by {request.approved_by}</small>}{request.error && <small>{request.error}</small>}</div>)}
         </section>
       </aside>
-    </div>
+    </div>}
     {confirmation && <ConfirmUpdate confirmation={confirmation} name={`${saved.first_name} ${saved.last_name}`} currency={saved.currency} busy={update.isPending}
       onCancel={() => setConfirmation(null)} onConfirm={() => { if (!update.isPending) update.mutate(confirmation) }} />}
     {toast && <div className={`update-toast toast-${toast.kind}`} role={toast.kind === 'error' ? 'alert' : 'status'}>

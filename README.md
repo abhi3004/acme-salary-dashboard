@@ -1,16 +1,38 @@
 # Acme Salary Dashboard
 
-The dashboard combines a persistent sidebar, organization-wide summary cards,
+AI development tooling: [quality skills, sources, and setup](docs/AI_SKILLS.md).
+This records installation, not a completed accessibility or security audit.
+
+The **Notifications** tab provides a read-only activity feed for accounts with
+`audit.read`. It shows who changed what and when across employee imports, salary and
+profile edits, change requests, payroll, and user invitations. Expand an event to see
+before/after values and context. Filter by activity type, browse 25 events per page,
+or refresh; page one also refreshes every 30 seconds. The backend persists the audit
+events, so they survive reloads and restarts. Historical records from before the
+feature was installed are not backfilled. There are no unread markers or email alerts.
+
+The dashboard combines a persistent sidebar, country-scoped summary cards,
 salary totals by department, a team-status chart, and a compact employee table.
 The `/employees` directory retains the full employee columns, while `/add`
 supports file imports and manual entry. On small screens the sidebar becomes
 a menu that can be dismissed with Escape or by selecting a destination.
 
-Summary data comes from `GET /api/dashboard` in the salary service. Salary cards
-and the department chart share a currency selector; values in different currencies
-are never combined. Organization-wide summaries are independent of table filters
-and pagination and refresh after a completed import. Loading, empty, and failed
-summary requests have separate states.
+The **Country** selector before **Add employee** is the dashboard's single scope,
+defaulting to **Global**. It controls salaries, department counts/chart, employee
+counts/statuses, and the employee list. Country employee counts show the selected
+count / organization total. Global salary totals and averages are approximate USD;
+country summaries use the local reporting currency. Native employee salary records
+remain unchanged. Mixed-currency salaries are converted before summing, and the
+average is weighted by employee count, including every employment status.
+
+Summary data comes from `GET /api/dashboard?country=India` (omit `country` for
+Global). Estimates use fixed ECB reference rates dated **2026-09-18**, not live
+rates; their date and approximation are visible in the UI. Missing conversion rates
+hide financial totals/chart instead of displaying partial estimates. Headcounts and
+original salaries remain available. Search and the remaining table filters narrow
+only the employee list, not the selected-country summary; clearing them preserves
+the top country selector. Summaries ignore pagination and refresh after imports or
+employee updates. Loading, empty, and failed summary requests have separate states.
 
 Employee IDs in both tables link to `/employee/:id`. The employee details page
 supports edits to personal information, employment status, department, role,

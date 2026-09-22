@@ -8,6 +8,12 @@ import type {
   EmployeeUpdate,
   EmployeeUpdateResponse,
   EmployeeChangeRequest,
+  EmployeePayrollSummary,
+  AuthUser,
+  ManagedUser,
+  Permission,
+  AuditCategory,
+  AuditLogResponse,
 } from './types'
 
 export class ApiError extends Error {
@@ -17,6 +23,46 @@ export class ApiError extends Error {
     this.name = 'ApiError'
     this.status = status
   }
+}
+
+export function fetchCurrentUser(): Promise<AuthUser> {
+  return fetch('/api/auth/me').then((response) => json<{ user: AuthUser }>(response)).then((body) => body.user)
+}
+
+export function login(email: string, password: string): Promise<AuthUser> {
+  return fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }) })
+    .then((response) => json<{ user: AuthUser }>(response)).then((body) => body.user)
+}
+
+export function logout(): Promise<void> {
+  return fetch('/api/auth/logout', { method: 'POST' }).then((response) => {
+    if (!response.ok && response.status !== 204) return json<never>(response)
+  }) as Promise<void>
+}
+
+export function fetchUsers(): Promise<{ users: ManagedUser[]; permissions: Permission[] }> {
+  return fetch('/api/users').then((response) => json(response))
+}
+
+export function fetchAuditEvents(page: number, category?: AuditCategory, signal?: AbortSignal): Promise<AuditLogResponse> {
+  const query = new URLSearchParams({ page: String(page), limit: '25' })
+  if (category) query.set('category', category)
+  return fetch(`/api/audit-events?${query}`, { signal }).then((response) => json<AuditLogResponse>(response))
+}
+
+export function inviteUser(input: { name: string; email: string; permissions: Permission[] }): Promise<{
+  invitation: { email: string; token: string; expires_at: string; accept_url: string }
+}> {
+  return fetch('/api/users/invitations', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input) }).then((response) => json(response))
+}
+
+export function acceptInvitation(token: string, password: string): Promise<void> {
+  return fetch(`/api/auth/invitations/${encodeURIComponent(token)}/accept`, { method: 'POST',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) }).then(async (response) => {
+    if (!response.ok) await json<never>(response)
+  })
 }
 
 async function json<T>(response: Response): Promise<T> {
@@ -37,6 +83,7 @@ export function fetchEmployees(params: EmployeeListParams, signal?: AbortSignal)
   for (const [field, value] of Object.entries(params.filters)) {
     if (value) query.set(field, value)
   }
+  if (params.search) query.set('search', params.search)
   if (params.minSalary) query.set('min_salary', params.minSalary)
   if (params.maxSalary) query.set('max_salary', params.maxSalary)
   return fetch(`/api/employees?${query}`, { signal }).then((r) => json<EmployeeListResponse>(r))
@@ -46,8 +93,9 @@ export function fetchFilterValues(): Promise<FilterValuesResponse> {
   return fetch('/api/employees/filters').then((r) => json<FilterValuesResponse>(r))
 }
 
-export function fetchDashboard(signal?: AbortSignal): Promise<DashboardSummary> {
-  return fetch('/api/dashboard', { signal }).then((r) => json<DashboardSummary>(r))
+export function fetchDashboard(signal?: AbortSignal, country?: string): Promise<DashboardSummary> {
+  const query = country ? `?${new URLSearchParams({ country })}` : ''
+  return fetch(`/api/dashboard${query}`, { signal }).then((r) => json<DashboardSummary>(r))
 }
 
 export function fetchEmployee(id: string, signal?: AbortSignal): Promise<Employee> {
@@ -74,6 +122,10 @@ export function requestEmployeeChange(id: string, input: EmployeeUpdate, actor: 
 
 export function fetchEmployeeChangeRequests(id: string): Promise<{ requests: EmployeeChangeRequest[] }> {
   return fetch(`/api/employees/${encodeURIComponent(id)}/change-requests`).then((response) => json(response))
+}
+
+export function fetchEmployeePayroll(id: string, signal?: AbortSignal): Promise<EmployeePayrollSummary> {
+  return fetch(`/api/employees/${encodeURIComponent(id)}/payroll`, { signal }).then((response) => json<EmployeePayrollSummary>(response))
 }
 
 export function fetchImport(id: string): Promise<ImportRecord> {
