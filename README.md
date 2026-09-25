@@ -1,136 +1,159 @@
 # Acme Salary Dashboard
 
-AI development tooling: [quality skills, sources, and setup](docs/AI_SKILLS.md).
-This records installation, not a completed accessibility or security audit.
+The frontend for the Acme salary management workspace. It gives HR teams one
+place to view employees, salaries, payroll, imports, approvals, users, and audit
+activity. The application is permission-aware and talks to the backend through
+same-origin `/api` requests.
 
-## API environment configuration
+## A. Run the project and set up the environment
 
-Browser requests stay on the frontend origin under `/api`. Vite reads
-`API_PROXY_TARGET` from the selected mode's env file and forwards those requests,
-preserving the `/api` path and setting the upstream Host header correctly:
+### Requirements
 
-- `.env.development`: `http://localhost:3000` (used by `npm run dev`).
-- `.env.production`: `https://of-acme-salary-dashboard-service-production.up.railway.app`
-  (used by production-mode tooling and `npm run preview`).
+- Node.js 22.13 or newer (Node.js 24 is recommended)
+- npm
+- The backend API running on `http://localhost:3000`
+- Redis and the backend import worker if you want to upload employee files
 
-These files contain only public backend URLs and are intentionally tracked. Put
-personal overrides in `.env.development.local` or `.env.production.local`; those
-files are ignored by Git. A process environment variable takes precedence over
-env files. Use an HTTP(S) origin without `/api`, credentials, query, or fragment.
-Restart Vite after changing an env file. Do not store passwords or tokens here;
-especially never expose secrets through `VITE_` variables.
+Install and start the frontend:
 
-To use the Railway API during local development:
+```sh
+npm install
+npm run dev
+```
+
+Vite prints the local URL, normally `http://localhost:5173`.
+
+For the full local system, go to the parent `Salary-Management-Software`
+directory and run:
+
+```sh
+npm run dev
+```
+
+That command starts the frontend, backend, and import worker together. Redis
+must already be running.
+
+### Environment setup
+
+The browser always calls `/api`. Vite forwards those requests to the target in
+the selected environment file:
+
+```dotenv
+# .env.development
+API_PROXY_TARGET=http://localhost:3000
+```
+
+Use `.env.development.local` for a personal local override. To use the deployed
+API while running the frontend locally:
 
 ```sh
 npm run dev -- --mode production
 ```
 
-That mode connects to the real backend, so form submissions affect its data.
+Do not put passwords, tokens, or other secrets in a Vite environment variable.
+Values exposed with a `VITE_` prefix are shipped to the browser. A production
+static host must also proxy `/api/*` to the backend so authentication cookies
+stay on the same site. The included `vercel.json` provides this rewrite for the
+current Vercel deployment.
 
-**Production deployment is not configured by an env file alone.** Vite builds
-static files; `dist` contains no running proxy. The production frontend host must
-route `/api/*` to the Railway backend and forward request/response cookies.
-Do not replace browser requests with the absolute Railway URL without designing
-CORS and cross-site cookie handling: the current login uses same-site cookies.
-`npm run preview` is for local verification, not a production web server.
-See [Vite env configuration](https://vite.dev/config/#using-environment-variables-in-config)
-and [static deployment guidance](https://vite.dev/guide/static-deploy).
+## B. Tech stack
 
-Run `npm run test:config` for deterministic mode/override/validation checks.
+- React 19 and TypeScript
+- Vite 8 for development and production builds
+- React Router for page routing
+- TanStack Query for server data and caching
+- TanStack Table and TanStack Virtual for large employee lists
+- jsPDF for client-side PDF work
+- Plain CSS with responsive layouts
+- Playwright for browser tests
+- Oxlint for linting
 
-## Application overview
+## C. Credentials
 
-The **Notifications** tab provides a read-only activity feed for accounts with
-`audit.read`. It shows who changed what and when across employee imports, salary and
-profile edits, change requests, payroll, and user invitations. Expand an event to see
-before/after values and context. Filter by activity type, browse 25 events per page,
-or refresh; page one also refreshes every 30 seconds. The backend persists the audit
-events, so they survive reloads and restarts. Historical records from before the
-feature was installed are not backfilled. There are no unread markers or email alerts.
+The frontend does not keep its own credentials. Sign in with an account created
+by the backend.
 
-The dashboard combines a persistent sidebar, country-scoped summary cards,
-salary totals by department, a team-status chart, and a compact employee table.
-The `/employees` directory retains the full employee columns, while `/add`
-supports file imports and manual entry. On small screens the sidebar becomes
-a menu that can be dismissed with Escape or by selecting a destination.
+For a new local backend, the example administrator is:
 
-The **Country** selector before **Add employee** is the dashboard's single scope,
-defaulting to **Global**. It controls salaries, department counts/chart, employee
-counts/statuses, and the employee list. Country employee counts show the selected
-count / organization total. Global salary totals and averages are approximate USD;
-country summaries use the local reporting currency. Native employee salary records
-remain unchanged. Mixed-currency salaries are converted before summing, and the
-average is weighted by employee count, including every employment status.
+```text
+Email: admin@acme.test
+Password: ChangeMe123!
+```
 
-Summary data comes from `GET /api/dashboard?country=India` (omit `country` for
-Global). Estimates use fixed ECB reference rates dated **2026-09-18**, not live
-rates; their date and approximation are visible in the UI. Missing conversion rates
-hide financial totals/chart instead of displaying partial estimates. Headcounts and
-original salaries remain available. Search and the remaining table filters narrow
-only the employee list, not the selected-country summary; clearing them preserves
-the top country selector. Summaries ignore pagination and refresh after imports or
-employee updates. Loading, empty, and failed summary requests have separate states.
+These are development defaults only. Change `ADMIN_EMAIL` and
+`ADMIN_PASSWORD` in the backend `.env` before sharing or deploying the app.
+The password must contain at least 12 characters. Never commit a real password.
 
-Employee IDs in both tables link to `/employee/:id`. The employee details page
-supports edits to personal information, employment status, department, role,
-country, joining date, salary, and currency. HR provides their work email for
-update attribution and reviews the exact before/after changes in an “Are you
-sure?” dialog before any PATCH request is sent. Success and failure toasts report
-the outcome; failed updates preserve the draft. Saving refreshes the employee,
-directory, filter options, and dashboard summaries. Stale edits are rejected;
-the page provides an explicit action to discard edits and reload the latest record.
+## D. Authentication setup
 
-The employee grid uses headless TanStack Table v9 and TanStack Virtual. Its
-560px scroll viewport contains sticky headers and fixed-height, virtualized rows.
-Dashboard rows are 62px; full-directory rows are 44px.
-Column widths stay stable as rows enter and leave the viewport; long cell values
-are truncated visually and available in the cell's title.
+The login form sends the email and password to the backend. After a successful
+login, the backend sets an HTTP-only `acme_session` cookie that lasts for 12
+hours. The cookie uses `SameSite=Strict` and is marked `Secure` in production.
 
-Sorting, filtering, and pagination are processed by the existing API, which caps
-pages at 10,000 rows. Virtualization limits the rendered rows within the current
-page. The stable feature configuration registers only sorting and pagination;
-no client processing row models or function registries are necessary. Query and
-Table share sorting/pagination atoms, while filters remain dashboard inputs.
-No table state is persisted to the browser URL.
+The frontend uses the current user's permissions to show relevant navigation and
+pages. The backend still checks every protected API request; hiding a frontend
+button is not a security boundary.
 
-Run `npm run build` and `npm run lint` for static checks. Browser regression tests
-use a mocked employee API, so no backend is required:
+Administrators can create users from the **Users** page. An invitation is valid
+for seven days and lets the invited user choose a password. There is currently no
+email delivery, password-reset flow, SSO, or self-service registration.
+
+## E. Main functions and purpose
+
+- Dashboard totals, employee counts, department charts, and status summaries
+- Global or country-level salary reporting
+- Searchable, sortable, virtualized employee directory
+- Employee profile, status, salary, and payroll history views
+- CSV or XLS employee imports with progress reporting
+- Salary and profile change requests with PDF proof
+- Payroll periods, adjustments, approvals, and payment history
+- User invitations and permission-based access
+- Read-only notifications and audit activity
+- Responsive navigation for desktop, tablet, and mobile screens
+
+Currency conversion uses a fixed backend exchange-rate snapshot for reporting.
+It is an estimate and must not be used to settle payroll.
+
+## F. AI skills used
+
+The following Codex skills were installed as development guidance:
+
+- `javascript-testing-patterns` — unit and integration test practices
+- `e2e-testing-patterns` — reliable Playwright tests
+- `web-design-guidelines` — accessibility and interface reviews
+- `responsive-design` — mobile and responsive layout guidance
+- `security-best-practices` — React and Express security reviews
+
+These skills are not runtime dependencies and their presence does not mean the
+application has passed an accessibility or security audit. Installation sources,
+pinned revisions, and the usage record are in
+[`docs/AI_SKILLS.md`](docs/AI_SKILLS.md).
+
+## G. Tests and simple CI/CD
+
+Run the local checks:
 
 ```sh
+npm run test:config
+npm run lint
+npm run build
 npx playwright install chromium
 npm run test:e2e
 ```
 
-## React + TypeScript + Vite
+The Playwright suite mocks the employee API, so it does not require a running
+backend. The configuration tests verify proxy mode loading and URL validation.
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+There is no GitHub Actions workflow checked in today. A simple CI job should run
+on pull requests and execute these steps:
 
-Currently, two official plugins are available:
+1. Check out the repository.
+2. Set up Node.js 24 with npm caching.
+3. Run `npm ci`.
+4. Run `npm run test:config`, `npm run lint`, and `npm run build`.
+5. Install Playwright Chromium and run `npm run test:e2e`.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
-```
-
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+For delivery, connect the frontend repository to Vercel and use `npm run build`
+with `dist` as the output directory. Deploy only after CI passes. Keep the
+`/api/*` rewrite pointed at the matching backend environment and verify login
+after deployment.
